@@ -1,70 +1,17 @@
 name: Validate collected transition snapshots
 on:
   push:
-    branches: [codex/validate-minari-snapshots]
+    branches: [codex/validate-minari-lint]
 permissions:
   contents: read
 jobs:
-  native-tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ['3.11', '3.14']
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 5
-      - name: Build the upstream native test image
-        run: docker build -f bin/Dockerfile --build-arg PYTHON_VERSION=${{ matrix.python }} --tag minari-tests .
-      - name: Fail-before regressions through native storage backends
-        shell: bash
-        run: |
-          mkdir -p reports
-          git show d88d29db69a84375274ce8c266e0e5d5f3a77a3f:minari/data_collector/data_collector.py > reports/baseline_data_collector.py
-          set +e
-          docker run --rm -v "$PWD/reports:/reports" -v "$PWD/reports/baseline_data_collector.py:/usr/local/minari/minari/data_collector/data_collector.py:ro" minari-tests pytest tests/data_collector/test_mutable_data.py -q --junitxml=/reports/regression-before.xml > reports/regression-before.log 2>&1
-          result=$?
-          set -e
-          cat reports/regression-before.log
-          test "$result" -eq 1
-          python - <<'PY'
-          import xml.etree.ElementTree as ET
-          suite = ET.parse('reports/regression-before.xml').getroot().find('testsuite')
-          assert suite.attrib['tests'] == '60', suite.attrib
-          assert suite.attrib['failures'] == '30', suite.attrib
-          assert suite.attrib['errors'] == '0', suite.attrib
-          PY
-      - name: Full native suite on upstream source
-        shell: bash
-        run: |
-          set +e
-          docker run --rm -v "$PWD/reports:/reports" -v "$PWD/reports/baseline_data_collector.py:/usr/local/minari/minari/data_collector/data_collector.py:ro" minari-tests pytest tests/ -k "not test_docs.py and not integrations" --ignore=tests/data_collector/test_mutable_data.py --junitxml=/reports/full-before.xml -q > reports/full-before.log 2>&1
-          echo "$?" > reports/full-before.exit
-          cat reports/full-before.log
-          exit 0
-      - name: Full native suite on the fix
-        shell: bash
-        run: |
-          set +e
-          docker run --rm -v "$PWD/reports:/reports" minari-tests pytest tests/ -k "not test_docs.py and not integrations" --junitxml=/reports/full-after.xml -q > reports/full-after.log 2>&1
-          result=$?
-          echo "$result" > reports/full-after.exit
-          cat reports/full-after.log
-          exit "$result"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: native-${{ matrix.python }}
-          path: reports
   pre-commit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: fa5f36c
+          ref: fa5f36c6b350a4eec91cbd8d86cfcca1805d181c
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
